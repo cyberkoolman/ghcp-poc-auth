@@ -71,6 +71,304 @@ def slide_number_tag(slide, num, total, color=GH_BLUE):
               size=11, color=RGBColor(0x88,0x92,0x9A), align=PP_ALIGN.RIGHT)
 
 
+def notes(slide, text: str):
+    """Add speaker notes to a slide (visible in Presenter View)."""
+    notes_slide = slide.notes_slide
+    tf = notes_slide.notes_text_frame
+    tf.text = text
+
+
+# Speaker-note text keyed by 1-based slide index.
+# Edit here to update talking points without touching the slide builders.
+_SPEAKER_NOTES = {
+    1: (
+        "Welcome everyone — today we're doing a practical deep-dive into GitHub Copilot for "
+        "developers. This isn't a marketing talk — we're going to look under the hood at how "
+        "the agent actually works, what you can customize, and walk through a real PoC we built "
+        "using nothing but /plan and agent mode. By the end you'll have a concrete toolkit you "
+        "can apply starting today."
+    ),
+    2: (
+        "Here's our roadmap. We'll start with a quick overview of what Copilot actually is, then "
+        "move into the built-in slash commands — especially /plan, which I want you to walk away "
+        "knowing cold. Then we do deep dives into each of the six customization primitives. The "
+        "back half is a real PoC walkthrough — we built an OAuth2 plus JWT auth system entirely "
+        "in agent mode — and we close with best practices and a security checklist."
+    ),
+    3: (
+        "Let's start with the basics. If you've used Copilot for inline completions, you've only "
+        "seen a small part of what it can do. The agent mode in Copilot Chat is a fundamentally "
+        "different experience — it plans, executes, reads files, runs tests, and loops until "
+        "it's done."
+    ),
+    4: (
+        "The key distinction here is the two surfaces. Inline completions are the next-token "
+        "suggestions while typing — useful, but just autocomplete. Copilot Chat in agent mode "
+        "is something else entirely: a full autonomous agent that can read your entire codebase, "
+        "run shell commands, edit multiple files, and run your tests. The model powering it right "
+        "now is Claude Sonnet 4.6. And critically — everything the agent does is shaped by your "
+        "customization files, which is most of what this talk is about."
+    ),
+    5: (
+        "The slash commands are the first place most developers stumble on power they didn't know "
+        "existed. Let's look at what each one actually does."
+    ),
+    6: (
+        "These are the slash commands baked into Copilot — most developers know maybe one of "
+        "these. The one I want to highlight is /plan — it's more sophisticated than it looks. "
+        "But the others are worth knowing: /init bootstraps a new repo with baseline "
+        "instructions, and the /create-* family turns good patterns from a conversation into "
+        "reusable team assets. Think of this table as your onboarding checklist for any new repo "
+        "you start working with Copilot."
+    ),
+    7: (
+        "Let's pull back the curtain on /plan. Most people type it, get a plan, and move on "
+        "without understanding what actually happened. Understanding the machinery helps you "
+        "give better inputs — and better inputs means better plans."
+    ),
+    8: (
+        "Here's the actual source file for /plan — the whole thing is 7 lines. This is not "
+        "where the intelligence lives; it's just a routing declaration. It says: when someone "
+        "types /plan, run the built-in Plan agent, not the default agent. The description field "
+        "shows in the command picker. The magic is inside the Plan agent itself, not in this "
+        "file. Understanding this structure matters because your own .prompt.md files use the "
+        "exact same format."
+    ),
+    9: (
+        "So what does the Plan agent actually do with your request? It starts by analyzing what "
+        "you asked and figuring out what it doesn't know — the gaps. That's where the "
+        "questionnaire comes from. It's not random questions; it's a targeted interview about "
+        "the specific decisions it needs to make your plan concrete. Once you answer, it maps "
+        "answers to technology choices, creates a dependency-ordered sequence of phases, and "
+        "then — this is the part people miss — saves the whole plan to session memory so it "
+        "persists throughout your entire implementation session."
+    ),
+    10: (
+        "Here's exactly what happened when we used /plan for our PoC. Six questions, six "
+        "answers, six phases. Notice the specificity — it didn't just say 'build "
+        "authentication', it produced a phase-by-phase breakdown with explicit technology "
+        "choices: RS256 JWT, Lua atomic scripts in Redis, React 19 with TypeScript. Every "
+        "subsequent Copilot action in that session referenced this plan. That's the value — "
+        "it creates a shared mental model between you and the agent that persists for the "
+        "entire conversation."
+    ),
+    11: (
+        "Now we get to the part I find most interesting — the customization layer. This is what "
+        "separates teams using Copilot as a fancy autocomplete from teams where every developer "
+        "gets consistent, project-aware, policy-enforced output."
+    ),
+    12: (
+        "There are six customization primitives and they're not interchangeable. The short "
+        "version: workspace instructions are your always-on project rules that apply to "
+        "everything. File instructions are scoped — either to file types or to specific task "
+        "contexts. Prompts are for single reusable tasks. Skills are for multi-step workflows "
+        "with bundled assets. Custom agents define specialized personas with restricted tools. "
+        "And hooks are for deterministic enforcement — things the model absolutely cannot skip."
+    ),
+    13: (
+        "Here are the decision questions I ask when choosing a primitive. The most important "
+        "distinction is Hooks versus Instructions. Instructions guide the agent — they're "
+        "directives the model reasons with. Hooks run shell commands at lifecycle events. If "
+        "you absolutely cannot afford for something to be skipped — like blocking a force push "
+        "or enforcing a linter pass — use a hook. If guidance that a good model will generally "
+        "follow is enough, use instructions."
+    ),
+    14: (
+        "Workspace Instructions are the most impactful customization for most teams because "
+        "they apply automatically to every chat request in the workspace. Let's look at what "
+        "a good one actually contains."
+    ),
+    15: (
+        "This is a typical workspace instructions file — no YAML frontmatter needed, it loads "
+        "automatically for every chat request. The Build and Test section is the "
+        "highest-stakes part: these are the actual commands the agent will run. Get these wrong "
+        "and the agent will confidently execute the wrong thing. The Architecture section "
+        "explains your structural decisions — not just what the pattern is, but why. This "
+        "prevents the agent from 'helpfully' reorganizing your code into a different "
+        "architecture it learned from training data."
+    ),
+    16: (
+        "Two anti-patterns I see constantly: creating both copilot-instructions.md and "
+        "AGENTS.md at the same time. Copilot only uses one — pick one and delete the other. "
+        "Second, putting everything in the file. A kitchen-sink instructions file is worse "
+        "than a focused one because the agent deprioritizes the parts it deems less relevant. "
+        "Keep it minimal — only what actually needs to be said for every task. And update it "
+        "when your practices change; the agent treats stale instructions as current truth."
+    ),
+    17: (
+        "File Instructions are workspace instructions with targeting. They let you write rules "
+        "that only apply when relevant files are in context, or when the agent identifies a "
+        "relevant task from your description keywords."
+    ),
+    18: (
+        "The frontmatter here has two key fields: description and applyTo, controlling two "
+        "different discovery modes. applyTo is a glob pattern — when any matching file is in "
+        "context, this instruction auto-loads. description is for agent-discovered loading — "
+        "the agent reads it to decide relevance. Write descriptions with 'Use when:' and "
+        "specific domain keywords. Keyword-rich descriptions are the difference between an "
+        "instruction that gets discovered and one that's ignored."
+    ),
+    19: (
+        "Four ways an instruction can load. On-demand is the most useful for task-based rules "
+        "— the agent reads your description and decides. Explicit file-based loading via "
+        "applyTo is great for language standards or test conventions. Manual attachment is "
+        "useful when you want something available but not auto-loaded. Always-on via "
+        "applyTo: '**' should be rare — if it applies to everything, put it in workspace "
+        "instructions instead."
+    ),
+    20: (
+        "Prompts are how you package a single task — something you do repeatedly — into a "
+        "slash command you can share with the whole team."
+    ),
+    21: (
+        "Here's a generate-tests prompt. The agent field sets the execution mode — 'agent' "
+        "means it can use tools to read files, edit files, search. The tools field restricts "
+        "what tools are available — principle of least privilege in practice. The model field "
+        "lets you pin a specific model for this prompt. And the body uses a relative Markdown "
+        "link to the tests folder — the agent will actually read those files to understand your "
+        "test patterns before generating new ones."
+    ),
+    22: (
+        "The main principle for prompts is single-task focus. A prompt that says 'create and "
+        "test and deploy' is three separate prompts — split them. The other thing that trips "
+        "people up is vague descriptions. Write descriptions like internal documentation: "
+        "'Use when you need to generate test cases for a class or method.' Also, use relative "
+        "Markdown links to reference relevant files; don't hardcode paths that break on "
+        "other machines."
+    ),
+    23: (
+        "Skills are for the workflows that are too complex for a single prompt — multiple "
+        "steps, supporting scripts, reference documents, boilerplate assets. If you've got "
+        "all that in a repeated workflow, make it a skill."
+    ),
+    24: (
+        "A critical gotcha: the folder name must exactly match the name field in SKILL.md. "
+        "If they don't match, the skill silently fails — no error, it just never loads. The "
+        "description field has two stages: first ~100 tokens for discovery, then the full "
+        "body loads when triggered. So your first two sentences need to be highly "
+        "keyword-rich. user-invocable controls whether it appears as a slash command in "
+        "the picker."
+    ),
+    25: (
+        "The folder structure matters because of progressive loading. The agent doesn't load "
+        "everything at once — it reads the SKILL.md body first, then loads additional files "
+        "only when they're explicitly referenced. This keeps the context window lean. Keep "
+        "SKILL.md under 500 lines and move detailed reference content into a references/ "
+        "subdirectory with relative links. The agent only pays the context cost of files "
+        "it actually needs for that specific invocation."
+    ),
+    26: (
+        "Custom agents are where you create specialized personas — a security reviewer who "
+        "can't edit files, a deployment agent with restricted shell access, a documentation "
+        "writer with read-only context. The tool restriction mechanism is what makes "
+        "this powerful."
+    ),
+    27: (
+        "The description field is doubly important for custom agents — it's the discovery "
+        "surface for both the user agent picker and for parent agents that might delegate "
+        "to this agent as a subagent. Write it with 'Use when:' and specific trigger "
+        "keywords. The Constraints section in the body is critical — explicit DO NOT rules "
+        "are more reliable than hoping the persona statement implies them. And agents: [] "
+        "prevents this agent from spinning up subagents, keeping focused agents focused."
+    ),
+    28: (
+        "Tool aliases are how you express the principle of least privilege in agent "
+        "definitions. A code reviewer only needs read and search. A documentation generator "
+        "only needs read and edit. An orchestrator needs agent to delegate to subagents. "
+        "The empty array [] gives a purely conversational agent with no workspace access — "
+        "useful for Q&A agents where you want to be certain it can't touch the filesystem. "
+        "If you omit tools entirely, the agent gets all defaults, which is wrong for "
+        "specialized agents."
+    ),
+    29: (
+        "Hooks are the most powerful and least-used customization primitive. They're the "
+        "one mechanism that provides deterministic enforcement — the shell command runs "
+        "regardless of what the model decides, because the hook runs in your terminal, "
+        "not inside the model."
+    ),
+    30: (
+        "Here's the anatomy of a hook configuration. The JSON is simple: a hooks object "
+        "with lifecycle event names as keys. Each event has an array of hook definitions. "
+        "The important detail is the timeout field — hooks are synchronous and block the "
+        "agent until they complete or time out. Keep your hooks fast, under 5 seconds. "
+        "The windows field provides a PowerShell equivalent on Windows — otherwise your "
+        "hook works on CI but breaks for Windows developers."
+    ),
+    31: (
+        "The I/O contract is how your script actually controls the agent. The agent passes "
+        "JSON on stdin describing what it's about to do — tool name and input. Your script "
+        "decides what to do and writes a JSON response to stdout. The permissionDecision "
+        "field is the key: deny blocks the tool call entirely, ask pauses and prompts the "
+        "user for approval, allow proceeds. This is the mechanism for policies like "
+        "'never force push without approval' that actually work regardless of model output."
+    ),
+    32: (
+        "Eight lifecycle events give you precise control over where hooks fire. PreToolUse "
+        "is the most commonly used — fires before every tool call and lets you block "
+        "dangerous operations. PostToolUse is great for enforcement after edits — run your "
+        "linter, check test pass, auto-format. SessionStart is where you inject dynamic "
+        "context that changes day-to-day. A common team pattern: PreToolUse to block force "
+        "push and drop database commands, PostToolUse to auto-format and run static "
+        "analysis after every file edit."
+    ),
+    33: (
+        "Now let's look at what actually happened when we built the PoC. Real projects hit "
+        "real obstacles. These six cases are instructive because similar issues will come up "
+        "for you on .NET 10 projects — some are SDK-level changes, others are subtle "
+        "interface-matching problems that the agent had to diagnose and fix itself."
+    ),
+    34: (
+        "Six obstacles, all resolved. Two that will save you the most time on .NET 10 "
+        "projects: first, dotnet new sln now creates a .slnx file, not .sln — if your "
+        "agent keeps failing on solution file commands, check this. Second, the Moq "
+        "StringSetAsync mismatch was subtle: the production code was calling an overload "
+        "that Moq couldn't match implicitly. The fix was making the production call "
+        "explicit about which overload it used, then updating the test setup to match "
+        "exactly. The agent diagnosed this itself — identified the overload mismatch and "
+        "fixed both files in one pass."
+    ),
+    35: (
+        "Let's close with the practices that separate teams getting consistent value from "
+        "Copilot from teams who are frustrated by it. Most of the frustration comes from "
+        "a small set of avoidable patterns."
+    ),
+    36: (
+        "Two highest-leverage practices: run /init on every new repo before writing any "
+        "code — it gives the agent accurate build commands and architecture context from "
+        "day one. And answer /plan questionnaires completely — the plan quality is a direct "
+        "function of your answer quality. On the common mistakes side: the YAML frontmatter "
+        "trap is worth calling out specifically — values containing colons must be quoted, "
+        "and a missing quote silently breaks your customization file with no error or "
+        "warning."
+    ),
+    37: (
+        "Security deserves its own slide. Generated code is never automatically correct "
+        "from a security standpoint — treat every generated file as a PR artifact that "
+        "needs review. The checklist here is what I personally run through on any "
+        "AI-generated auth code: algorithm pinned to RS256, both issuer and audience "
+        "validated, cookies have all three flags, CORS locked to a specific origin. The "
+        "good news: write these rules into an .instructions.md file and the agent enforces "
+        "them on every piece of code it generates for the rest of the session."
+    ),
+    38: (
+        "These six steps are your starting checklist — you can do the first three right "
+        "now. /plan with your current backlog item, /init on the repo you're working in, "
+        "/create-instructions to capture the patterns from this conversation. That's the "
+        "fastest path from zero to a team-wide Copilot setup that produces consistent "
+        "results. I'll drop the repo link in the chat — all the customization files we "
+        "discussed are in there. Questions?"
+    ),
+}
+
+
+def apply_speaker_notes(prs):
+    """Post-process: attach speaker notes to every slide by 1-based index."""
+    for idx, slide in enumerate(prs.slides):
+        note_text = _SPEAKER_NOTES.get(idx + 1)
+        if note_text:
+            notes(slide, note_text)
+
+
 # ── Slide builders ─────────────────────────────────────────────────────────
 
 def slide_title(prs, title, subtitle):
@@ -793,6 +1091,8 @@ def build():
 
     # ── Closing ─────────────────────────────────────────────────────────
     slide_closing(prs, TOTAL)
+
+    apply_speaker_notes(prs)
 
     out = r"c:\Projects\GHCP\docs\ghcp-getting-started.pptx"
     prs.save(out)
